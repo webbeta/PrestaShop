@@ -61,6 +61,18 @@ class SearchControllerCore extends ProductListingFrontController
     }
 
     /**
+     * Ensure that no search results page is indexed by search engines.
+     */
+    public function getTemplateVarPage()
+    {
+        $page = parent::getTemplateVarPage();
+
+        $page['meta']['robots'] = 'noindex';
+
+        return $page;
+    }
+
+    /**
      * Performs the search.
      */
     public function initContent()
@@ -98,7 +110,7 @@ class SearchControllerCore extends ProductListingFrontController
         $breadcrumb = parent::getBreadcrumbLinks();
         $breadcrumb['links'][] = array(
             'title' => $this->getTranslator()->trans('Search results', array(), 'Shop.Theme.Catalog'),
-            'url' => $this->context->link->getPageLink('search'),
+            'url' => $this->getCurrentUrl(),
         );
 
         return $breadcrumb;

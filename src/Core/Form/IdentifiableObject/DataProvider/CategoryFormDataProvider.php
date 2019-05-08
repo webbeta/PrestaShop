@@ -1,6 +1,6 @@
 <?php
 /**
- * 2007-2018 PrestaShop
+ * 2007-2019 PrestaShop and Contributors
  *
  * NOTICE OF LICENSE
  *
@@ -16,10 +16,10 @@
  *
  * Do not edit or add to this file if you wish to upgrade PrestaShop to newer
  * versions in the future. If you wish to customize PrestaShop for your
- * needs please refer to http://www.prestashop.com for more information.
+ * needs please refer to https://www.prestashop.com for more information.
  *
  * @author    PrestaShop SA <contact@prestashop.com>
- * @copyright 2007-2018 PrestaShop SA
+ * @copyright 2007-2019 PrestaShop SA and Contributors
  * @license   https://opensource.org/licenses/OSL-3.0 Open Software License (OSL 3.0)
  * International Registered Trademark & Property of PrestaShop SA
  */
@@ -29,8 +29,7 @@ namespace PrestaShop\PrestaShop\Core\Form\IdentifiableObject\DataProvider;
 use PrestaShop\PrestaShop\Core\CommandBus\CommandBusInterface;
 use PrestaShop\PrestaShop\Core\Domain\Category\Query\GetCategoryForEditing;
 use PrestaShop\PrestaShop\Core\Domain\Category\QueryResult\EditableCategory;
-use PrestaShop\PrestaShop\Core\Domain\Group\Query\GetDefaultGroups;
-use PrestaShop\PrestaShop\Core\Domain\Group\QueryResult\DefaultGroups;
+use PrestaShop\PrestaShop\Core\Group\Provider\DefaultGroupsProviderInterface;
 
 /**
  * Provides data for category add/edit category forms
@@ -48,13 +47,31 @@ final class CategoryFormDataProvider implements FormDataProviderInterface
     private $contextShopId;
 
     /**
+     * @var int
+     */
+    private $contextShopRootCategoryId;
+
+    /**
+     * @var DefaultGroupsProviderInterface
+     */
+    private $defaultGroupsProvider;
+
+    /**
      * @param CommandBusInterface $queryBus
      * @param int $contextShopId
+     * @param int $contextShopRootCategoryId
+     * @param DefaultGroupsProviderInterface $defaultGroupsProvider
      */
-    public function __construct(CommandBusInterface $queryBus, $contextShopId)
-    {
+    public function __construct(
+        CommandBusInterface $queryBus,
+        $contextShopId,
+        $contextShopRootCategoryId,
+        DefaultGroupsProviderInterface $defaultGroupsProvider
+    ) {
         $this->queryBus = $queryBus;
         $this->contextShopId = $contextShopId;
+        $this->contextShopRootCategoryId = $contextShopRootCategoryId;
+        $this->defaultGroupsProvider = $defaultGroupsProvider;
     }
 
     /**
@@ -84,18 +101,17 @@ final class CategoryFormDataProvider implements FormDataProviderInterface
      */
     public function getDefaultData()
     {
-        /** @var DefaultGroups $defaultGroups */
-        $defaultGroups = $this->queryBus->handle(new GetDefaultGroups());
+        $defaultGroups = $this->defaultGroupsProvider->getGroups();
 
         return [
+            'id_parent' => $this->contextShopRootCategoryId,
             'group_association' => [
-                $defaultGroups->getVisitorsGroup()->getGroupId()->getValue(),
-                $defaultGroups->getGuestsGroup()->getGroupId()->getValue(),
-                $defaultGroups->getCustomersGroup()->getGroupId()->getValue(),
+                $defaultGroups->getVisitorsGroup()->getId(),
+                $defaultGroups->getGuestsGroup()->getId(),
+                $defaultGroups->getCustomersGroup()->getId(),
             ],
-            'shop_association' => [
-                $this->contextShopId,
-            ],
+            'shop_association' => $this->contextShopId,
+            'active' => true,
         ];
     }
 }

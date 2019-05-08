@@ -5,7 +5,7 @@ services:
   prestashop.core.util.helper_card.documentation_link_provider:
     class: 'PrestaShop\PrestaShop\Core\Util\HelperCard\DocumentationLinkProvider'
     arguments:
-      - '@=service("prestashop.adapter.legacy.context").getContext().language.iso_code'
+      - '@=service("prestashop.adapter.legacy.context").getContext().language ? service("prestashop.adapter.legacy.context").getContext().language.iso_code : "en-US"'
       -
         'team':
           'en': 'http://doc.prestashop.com/display/PS17/Team'
@@ -29,3 +29,15 @@ services:
           'es': 'http://doc.prestashop.com/display/PS17/Gestionar+Proveedores'
           'it': 'http://doc.prestashop.com/display/PS17/Gestire+Fornitori'
           '_fallback': 'http://doc.prestashop.com/display/PS17/Managing+Suppliers'
+        'category':
+          'en': 'http://doc.prestashop.com/display/PS17/Managing+Categories'
+          'fr': 'http://doc.prestashop.com/display/PS17/Gerer+les+categories'
+          'es': 'http://doc.prestashop.com/display/PS17/Gestionar+las+categorias'
+          'it': 'http://doc.prestashop.com/display/PS17/Gestire+Categorie'
+          '_fallback': 'http://doc.prestashop.com/display/PS17/Managing+Categories'
+        'cms_pages':
+          'en': 'http://doc.prestashop.com/display/PS17/Pages+-+Managing+Static+Content'
+          'fr': 'http://doc.prestashop.com/display/PS17/Gerer+votre+contenu+statique+grace+aux+pages'
+          'es': 'http://doc.prestashop.com/display/PS17/Paginas+-+Gestionar+el+Contenido+Estatico'
+          'it': 'http://doc.prestashop.com/display/PS17/Pagine+-+Gestione+Contenuti+Statici'
+          '_fallback': 'http://doc.prestashop.com/display/PS17/Pages+-+Managing+Static+Content'

@@ -132,7 +132,7 @@ class LinkCore
         $ean13 = null,
         $idLang = null,
         $idShop = null,
-        $ipa = 0,
+        $ipa = null,
         $force_routes = false,
         $relativeProtocol = false,
         $addAnchor = false,
@@ -161,6 +161,10 @@ class LinkCore
             $params['id'] = $product->id;
         }
 
+        //Attribute equal to 0 or empty is useless, so we force it to null so that it won't be inserted in query parameters
+        if (empty($ipa)) {
+            $ipa = null;
+        }
         $params['id_product_attribute'] = $ipa;
         if (!$alias) {
             $product = $this->getProductObject($product, $idLang, $idShop);
@@ -782,6 +786,21 @@ class LinkCore
                 }
 
                 $routeName = 'admin_international_translations_show_settings';
+
+                break;
+
+            case 'AdminEmployees':
+                if (!isset($params['action'])) {
+                    break;
+                }
+
+                if ('toggleMenu' === $params['action']) {
+                    // Linking legacy toggle menu action to migrated action.
+                    $routeName = 'admin_employees_toggle_navigation';
+                } elseif ('formLanguage' === $params['action']) {
+                    // Linking legacy change form language action to migrated action.
+                    $routeName = 'admin_employees_change_form_language';
+                }
 
                 break;
         }

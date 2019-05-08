@@ -1,5 +1,5 @@
 /**
- * 2007-2018 PrestaShop
+ * 2007-2019 PrestaShop and Contributors
  *
  * NOTICE OF LICENSE
  *
@@ -15,10 +15,10 @@
  *
  * Do not edit or add to this file if you wish to upgrade PrestaShop to newer
  * versions in the future. If you wish to customize PrestaShop for your
- * needs please refer to http://www.prestashop.com for more information.
+ * needs please refer to https://www.prestashop.com for more information.
  *
  * @author    PrestaShop SA <contact@prestashop.com>
- * @copyright 2007-2018 PrestaShop SA
+ * @copyright 2007-2019 PrestaShop SA and Contributors
  * @license   https://opensource.org/licenses/OSL-3.0 Open Software License (OSL 3.0)
  * International Registered Trademark & Property of PrestaShop SA
  */
@@ -31,7 +31,12 @@ const $ = window.$;
  */
 $(() => {
   // loads form popover instance
-  $('[data-toggle="form-popover-error"]').popover();
+  $('[data-toggle="form-popover-error"]').popover({
+    html: true,
+    content: function () {
+      return getErrorContent(this);
+    },
+  });
 
   /**
    * Recalculates popover position so it is always aligned horizontally and width is identical
@@ -64,6 +69,18 @@ $(() => {
     const popoverHorizontalPosition = $errorPopover.offset().left;
 
     return inputHorizontalPosition - popoverHorizontalPosition;
+  };
+
+  /**
+   * Gets popover error content pre-fetched in html. It used unique selector to identify which one content to render.
+   *
+   * @param popoverTriggerElement
+   * @returns {jQuery}
+   */
+  const getErrorContent = (popoverTriggerElement) => {
+    const popoverTriggerId = $(popoverTriggerElement).data('id');
+
+    return $(`.js-popover-error-content[data-id="${popoverTriggerId}"]`).html();
   };
 
   // registers the event which displays the popover

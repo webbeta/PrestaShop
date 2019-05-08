@@ -47,6 +47,11 @@ class CategoryConstraintException extends CategoryException
     const INVALID_STATUS = 4;
 
     /**
+     * Code is used when invalid delete mode is used to delete a category.
+     */
+    const INVALID_DELETE_MODE = 5;
+
+    /**
      * Code is used when invalid parent id is supplied.
      */
     const INVALID_PARENT_ID = 6;
@@ -55,11 +60,6 @@ class CategoryConstraintException extends CategoryException
      * Code is used when too many menu thumbnails is being set for category.
      */
     const TOO_MANY_MENU_THUMBNAILS = 8;
-
-    /**
-     * Code is used when category's parent is same category itself.
-     */
-    const CANNOT_BE_PARENT_OF_ITSELF = 10;
 
     /**
      * Code is used when performing bulk delete of categories with empty data.

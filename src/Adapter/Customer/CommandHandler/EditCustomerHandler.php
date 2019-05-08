@@ -33,7 +33,7 @@ use PrestaShop\PrestaShop\Core\Domain\Customer\CommandHandler\EditCustomerHandle
 use PrestaShop\PrestaShop\Core\Domain\Customer\Exception\CustomerDefaultGroupAccessException;
 use PrestaShop\PrestaShop\Core\Domain\Customer\Exception\CustomerException;
 use PrestaShop\PrestaShop\Core\Domain\Customer\Exception\DuplicateCustomerEmailException;
-use PrestaShop\PrestaShop\Core\Domain\Customer\ValueObject\Email;
+use PrestaShop\PrestaShop\Core\Domain\ValueObject\Email;
 
 /**
  * Handles commands which edits given customer with provided data.
@@ -81,9 +81,9 @@ final class EditCustomerHandler extends AbstractCustomerHandler implements EditC
             throw new CustomerException('Customer contains invalid field values');
         }
 
-        $customer->update();
-
-        return $customerId;
+        if (false === $customer->update()) {
+            throw new CustomerException('Failed to update customer');
+        }
     }
 
     /**

@@ -27,12 +27,13 @@
 namespace PrestaShopBundle\Controller\Admin\Sell\Catalog;
 
 use PrestaShop\PrestaShop\Core\Domain\Category\Command\BulkDeleteCategoriesCommand;
+use PrestaShop\PrestaShop\Core\Domain\Category\Command\BulkDisableCategoriesCommand;
+use PrestaShop\PrestaShop\Core\Domain\Category\Command\BulkEnableCategoriesCommand;
 use PrestaShop\PrestaShop\Core\Domain\Category\Command\DeleteCategoryCommand;
-use PrestaShop\PrestaShop\Core\Domain\Category\Command\DisableCategoriesCommand;
 use PrestaShop\PrestaShop\Core\Domain\Category\Command\DeleteCategoryCoverImageCommand;
 use PrestaShop\PrestaShop\Core\Domain\Category\Command\DeleteCategoryMenuThumbnailImageCommand;
-use PrestaShop\PrestaShop\Core\Domain\Category\Command\EnableCategoriesCommand;
 use PrestaShop\PrestaShop\Core\Domain\Category\Command\ToggleCategoryStatusCommand;
+use PrestaShop\PrestaShop\Core\Domain\Category\Command\UpdateCategoryPositionCommand;
 use PrestaShop\PrestaShop\Core\Domain\Category\QueryResult\EditableCategory;
 use PrestaShop\PrestaShop\Core\Domain\Category\Exception\CannotDeleteRootCategoryForShopException;
 use PrestaShop\PrestaShop\Core\Domain\Category\Exception\CannotUpdateCategoryStatusException;
@@ -43,15 +44,14 @@ use PrestaShop\PrestaShop\Core\Domain\Category\Exception\CategoryNotFoundExcepti
 use PrestaShop\PrestaShop\Core\Domain\Category\Exception\MenuThumbnailsLimitException;
 use PrestaShop\PrestaShop\Core\Domain\Category\Query\GetCategoryForEditing;
 use PrestaShop\PrestaShop\Core\Domain\Category\ValueObject\MenuThumbnailId;
-use PrestaShop\PrestaShop\Core\Domain\Group\Query\GetDefaultGroups;
-use PrestaShop\PrestaShop\Core\Domain\Group\QueryResult\DefaultGroups;
+use PrestaShop\PrestaShop\Core\Domain\ShowcaseCard\Query\GetShowcaseCardIsClosed;
+use PrestaShop\PrestaShop\Core\Domain\ShowcaseCard\ValueObject\ShowcaseCard;
 use PrestaShop\PrestaShop\Core\Search\Filters\CategoryFilters;
 use PrestaShopBundle\Component\CsvResponse;
 use PrestaShopBundle\Controller\Admin\FrameworkBundleAdminController;
 use PrestaShopBundle\Form\Admin\Sell\Category\DeleteCategoriesType;
 use PrestaShopBundle\Security\Annotation\AdminSecurity;
 use PrestaShopBundle\Security\Annotation\DemoRestricted;
-use PrestaShopBundle\Security\Voter\PageVoter;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -66,7 +66,7 @@ class CategoryController extends FrameworkBundleAdminController
     /**
      * Show categories listing.
      *
-     * @AdminSecurity("is_granted(['read', 'update', 'create', 'delete'], request.get('_legacy_controller'))")
+     * @AdminSecurity("is_granted(['read'], request.get('_legacy_controller'))")
      *
      * @param Request $request
      * @param CategoryFilters $filters
@@ -86,14 +86,21 @@ class CategoryController extends FrameworkBundleAdminController
 
         $deleteCategoriesForm = $this->createForm(DeleteCategoriesType::class);
 
+        $showcaseCardIsClosed = $this->getQueryBus()->handle(
+            new GetShowcaseCardIsClosed((int) $this->getContext()->employee->id, ShowcaseCard::CATEGORIES_CARD)
+        );
+
         return $this->render('@PrestaShop/Admin/Sell/Catalog/Categories/index.html.twig', [
             'help_link' => $this->generateSidebarLink($request->attributes->get('_legacy_controller')),
             'enableSidebar' => true,
             'categoriesGrid' => $this->presentGrid($categoryGrid),
             'categoriesKpi' => $categoriesKpiFactory->build(),
-            'layoutHeaderToolbarBtn' => $this->getCategoryToolbarButtons(),
+            'layoutHeaderToolbarBtn' => $this->getCategoryToolbarButtons($request),
             'currentCategoryView' => $categoryViewData,
             'deleteCategoriesForm' => $deleteCategoriesForm->createView(),
+            'isSingleShopContext' => $this->get('prestashop.adapter.shop.context')->isSingleShopContext(),
+            'showcaseCardName' => ShowcaseCard::CATEGORIES_CARD,
+            'isShowcaseCardClosed' => $showcaseCardIsClosed,
         ]);
     }
 
@@ -102,6 +109,7 @@ class CategoryController extends FrameworkBundleAdminController
      *
      * @AdminSecurity(
      *     "is_granted(['create'], request.get('_legacy_controller'))",
+     *     redirectRoute="admin_categories_index",
      *     message="You do not have permission to create this."
      * )
      *
@@ -109,12 +117,14 @@ class CategoryController extends FrameworkBundleAdminController
      *
      * @return Response
      */
-    public function addAction(Request $request)
+    public function createAction(Request $request)
     {
         $categoryFormBuilder = $this->get('prestashop.core.form.identifiable_object.builder.category_form_builder');
         $categoryFormHandler = $this->get('prestashop.core.form.identifiable_object.handler.category_form_handler');
 
-        $categoryForm = $categoryFormBuilder->getForm();
+        $parentId = (int) $request->query->get('id_parent', $this->configuration->getInt('PS_HOME_CATEGORY'));
+
+        $categoryForm = $categoryFormBuilder->getForm(['id_parent' => $parentId]);
         $categoryForm->handleRequest($request);
 
         try {
@@ -123,16 +133,17 @@ class CategoryController extends FrameworkBundleAdminController
             if (null !== $handlerResult->getIdentifiableObjectId()) {
                 $this->addFlash('success', $this->trans('Successful creation.', 'Admin.Notifications.Success'));
 
-                return $this->redirectToRoute('admin_categories_index');
+                return $this->redirectToRoute('admin_categories_index', [
+                    'id_category' => $categoryForm->getData()['id_parent'],
+                ]);
             }
         } catch (CategoryException $e) {
             $this->addFlash('error', $this->getErrorMessageForException($e, $this->getErrorMessages()));
         }
 
-        /** @var DefaultGroups $defaultGroups */
-        $defaultGroups = $this->getQueryBus()->handle(new GetDefaultGroups());
+        $defaultGroups = $this->get('prestashop.adapter.group.provider.default_groups_provider')->getGroups();
 
-        return $this->render('@PrestaShop/Admin/Sell/Catalog/Categories/add.html.twig', [
+        return $this->render('@PrestaShop/Admin/Sell/Catalog/Categories/create.html.twig', [
             'allowMenuThumbnailsUpload' => true,
             'categoryForm' => $categoryForm->createView(),
             'defaultGroups' => $defaultGroups,
@@ -144,6 +155,7 @@ class CategoryController extends FrameworkBundleAdminController
      *
      * @AdminSecurity(
      *     "is_granted(['create'], request.get('_legacy_controller'))",
+     *     redirectRoute="admin_categories_index",
      *     message="You do not have permission to create this."
      * )
      *
@@ -151,7 +163,7 @@ class CategoryController extends FrameworkBundleAdminController
      *
      * @return Response
      */
-    public function addRootAction(Request $request)
+    public function createRootAction(Request $request)
     {
         $rootCategoryFormBuilder =
             $this->get('prestashop.core.form.identifiable_object.builder.root_category_form_builder');
@@ -167,16 +179,17 @@ class CategoryController extends FrameworkBundleAdminController
             if (null !== $handlerResult->getIdentifiableObjectId()) {
                 $this->addFlash('success', $this->trans('Successful creation.', 'Admin.Notifications.Success'));
 
-                return $this->redirectToRoute('admin_categories_index');
+                return $this->redirectToRoute('admin_categories_index', [
+                    'id_category' => $this->configuration->getInt('PS_ROOT_CATEGORY'),
+                ]);
             }
         } catch (CategoryException $e) {
             $this->addFlash('error', $this->getErrorMessageForException($e, $this->getErrorMessages()));
         }
 
-        /** @var DefaultGroups $defaultGroups */
-        $defaultGroups = $this->getQueryBus()->handle(new GetDefaultGroups());
+        $defaultGroups = $this->get('prestashop.adapter.group.provider.default_groups_provider')->getGroups();
 
-        return $this->render('@PrestaShop/Admin/Sell/Catalog/Categories/add_root.html.twig', [
+        return $this->render('@PrestaShop/Admin/Sell/Catalog/Categories/create_root.html.twig', [
             'allowMenuThumbnailsUpload' => true,
             'rootCategoryForm' => $rootCategoryForm->createView(),
             'defaultGroups' => $defaultGroups,
@@ -188,6 +201,7 @@ class CategoryController extends FrameworkBundleAdminController
      *
      * @AdminSecurity(
      *     "is_granted(['update'], request.get('_legacy_controller'))",
+     *     redirectRoute="admin_categories_index",
      *     message="You do not have permission to edit this."
      * )
      *
@@ -224,17 +238,18 @@ class CategoryController extends FrameworkBundleAdminController
 
             $handlerResult = $categoryFormHandler->handleFor((int) $categoryId, $categoryForm);
 
-            if (null !== $handlerResult->getIdentifiableObjectId()) {
+            if ($handlerResult->isSubmitted() && $handlerResult->isValid()) {
                 $this->addFlash('success', $this->trans('Successful update.', 'Admin.Notifications.Success'));
 
-                return $this->redirectToRoute('admin_categories_index');
+                return $this->redirectToRoute('admin_categories_index', [
+                    'id_category' => $categoryForm->getData()['id_parent'],
+                ]);
             }
         } catch (CategoryException $e) {
             $this->addFlash('error', $this->getErrorMessageForException($e, $this->getErrorMessages()));
         }
 
-        /** @var DefaultGroups $defaultGroups */
-        $defaultGroups = $this->getQueryBus()->handle(new GetDefaultGroups());
+        $defaultGroups = $this->get('prestashop.adapter.group.provider.default_groups_provider')->getGroups();
 
         return $this->render('@PrestaShop/Admin/Sell/Catalog/Categories/edit.html.twig', [
             'allowMenuThumbnailsUpload' => $editableCategory->canContainMoreMenuThumbnails(),
@@ -251,6 +266,7 @@ class CategoryController extends FrameworkBundleAdminController
      *
      * @AdminSecurity(
      *     "is_granted(['update'], request.get('_legacy_controller'))",
+     *     redirectRoute="admin_categories_index",
      *     message="You do not have permission to edit this."
      * )
      *
@@ -280,22 +296,23 @@ class CategoryController extends FrameworkBundleAdminController
             $this->get('prestashop.core.form.identifiable_object.handler.root_category_form_handler');
 
         try {
-            $rootCategoryForm = $rootCategoryFormBuilder->getForm();
+            $rootCategoryForm = $rootCategoryFormBuilder->getFormFor((int) $categoryId);
             $rootCategoryForm->handleRequest($request);
 
             $handlerResult = $rootCategoryFormHandler->handleFor((int) $categoryId, $rootCategoryForm);
 
-            if (null !== $handlerResult->getIdentifiableObjectId()) {
+            if ($handlerResult->isSubmitted() && $handlerResult->isValid()) {
                 $this->addFlash('success', $this->trans('Successful update.', 'Admin.Notifications.Success'));
 
-                return $this->redirectToRoute('admin_categories_index');
+                return $this->redirectToRoute('admin_categories_index', [
+                    'id_category' => $this->configuration->getInt('PS_ROOT_CATEGORY'),
+                ]);
             }
         } catch (CategoryException $e) {
             $this->addFlash('error', $this->getErrorMessageForException($e, $this->getErrorMessages()));
         }
 
-        /** @var DefaultGroups $defaultGroups */
-        $defaultGroups = $this->getQueryBus()->handle(new GetDefaultGroups());
+        $defaultGroups = $this->get('prestashop.adapter.group.provider.default_groups_provider')->getGroups();
 
         return $this->render('@PrestaShop/Admin/Sell/Catalog/Categories/edit_root.html.twig', [
             'allowMenuThumbnailsUpload' => $editableCategory->canContainMoreMenuThumbnails(),
@@ -312,6 +329,8 @@ class CategoryController extends FrameworkBundleAdminController
      *
      * @AdminSecurity(
      *     "is_granted(['update'], request.get('_legacy_controller'))",
+     *     redirectRoute="admin_categories_edit",
+     *     redirectQueryParamsToKeep={"categoryId"},
      *     message="You do not have permission to edit this."
      * )
      *
@@ -351,6 +370,8 @@ class CategoryController extends FrameworkBundleAdminController
      *
      * @AdminSecurity(
      *     "is_granted(['update'], request.get('_legacy_controller'))",
+     *     redirectRoute="admin_categories_edit",
+     *     redirectQueryParamsToKeep={"categoryId"},
      *     message="You do not have permission to edit this."
      * )
      *
@@ -392,26 +413,21 @@ class CategoryController extends FrameworkBundleAdminController
     /**
      * Toggle category status.
      *
-     * @param Request $request
+     * @AdminSecurity(
+     *     "is_granted(['update'], request.get('_legacy_controller'))",
+     *     message="You do not have permission to update this."
+     * )
+     *
      * @param int $categoryId
      *
      * @return JsonResponse
      */
-    public function toggleStatusAction(Request $request, $categoryId)
+    public function toggleStatusAction($categoryId)
     {
         if ($this->isDemoModeEnabled()) {
             return $this->json([
                 'status' => false,
                 'message' => $this->getDemoModeErrorMessage(),
-            ]);
-        }
-
-        $authLevel = $this->authorizationLevel($request->attributes->get('_legacy_controller'));
-
-        if (!in_array($authLevel, [PageVoter::LEVEL_UPDATE, PageVoter::LEVEL_DELETE])) {
-            return $this->json([
-                'status' => false,
-                'message' => $this->trans('You do not have permission to update this.', 'Admin.Notifications.Error'),
             ]);
         }
 
@@ -451,11 +467,9 @@ class CategoryController extends FrameworkBundleAdminController
     public function bulkEnableStatusAction(Request $request)
     {
         try {
-            $categoryIds = array_map(function ($categoryId) {
-                return (int) $categoryId;
-            }, $request->request->get('categories_bulk'));
+            $categoryIds = $this->getBulkCategoriesFromRequest($request);
 
-            $command = new EnableCategoriesCommand($categoryIds);
+            $command = new BulkEnableCategoriesCommand($categoryIds);
 
             $this->getCommandBus()->handle($command);
 
@@ -487,11 +501,9 @@ class CategoryController extends FrameworkBundleAdminController
     public function bulkDisableStatusAction(Request $request)
     {
         try {
-            $categoryIds = array_map(function ($categoryId) {
-                return (int) $categoryId;
-            }, $request->request->get('categories_bulk'));
+            $categoryIds = $this->getBulkCategoriesFromRequest($request);
 
-            $command = new DisableCategoriesCommand($categoryIds);
+            $command = new BulkDisableCategoriesCommand($categoryIds);
 
             $this->getCommandBus()->handle($command);
 
@@ -637,22 +649,61 @@ class CategoryController extends FrameworkBundleAdminController
     }
 
     /**
+     * Updates category position
+     *
+     * @AdminSecurity(
+     *     "is_granted('update', request.get('_legacy_controller'))",
+     *     redirectRoute="admin_categories_index",
+     * )
+     *
+     * @param Request $request
+     *
+     * @return JsonResponse
+     */
+    public function updatePositionAction(Request $request)
+    {
+        try {
+            $this->getCommandBus()->handle(new UpdateCategoryPositionCommand(
+                $request->request->getInt('id_category_to_move'),
+                $request->request->getInt('id_category_parent'),
+                $request->request->getInt('way'),
+                $request->request->get('positions'),
+                $request->request->getBoolean('found_first')
+            ));
+        } catch (CategoryException $e) {
+            return $this->json([
+                'success' => false,
+                'message' => $this->getErrorMessageForException($e, $this->getErrorMessages()),
+            ]);
+        }
+
+        return $this->json([
+            'success' => true,
+            'message' => $this->trans('Successful update.', 'Admin.Notifications.Success'),
+        ]);
+    }
+
+    /**
+     * @param Request $request
+     *
      * @return array
      */
-    private function getCategoryToolbarButtons()
+    private function getCategoryToolbarButtons(Request $request)
     {
         $toolbarButtons = [];
 
         if ($this->get('prestashop.adapter.feature.multistore')->isUsed()) {
             $toolbarButtons['add_root'] = [
-                'href' => $this->generateUrl('admin_categories_add_root'),
+                'href' => $this->generateUrl('admin_categories_create_root'),
                 'desc' => $this->trans('Add new root category', 'Admin.Catalog.Feature'),
                 'icon' => 'add_circle_outline',
             ];
         }
 
+        $categoryId = $request->query->get('id_category', $this->configuration->getInt('PS_HOME_CATEGORY'));
+
         $toolbarButtons['add'] = [
-            'href' => $this->generateUrl('admin_categories_add'),
+            'href' => $this->generateUrl('admin_categories_create', ['id_parent' => $categoryId]),
             'desc' => $this->trans('Add new category', 'Admin.Catalog.Feature'),
             'icon' => 'add_circle_outline',
         ];
@@ -692,5 +743,25 @@ class CategoryController extends FrameworkBundleAdminController
                 $this->trans('You cannot upload more files', 'Admin.Notifications.Error')
             ),
         ];
+    }
+
+    /**
+     * @param Request $request
+     *
+     * @return array
+     */
+    private function getBulkCategoriesFromRequest(Request $request)
+    {
+        $categoryIds = $request->request->get('category_id_category');
+
+        if (!is_array($categoryIds)) {
+            return [];
+        }
+
+        foreach ($categoryIds as $i => $categoryId) {
+            $categoryIds[$i] = (int) $categoryId;
+        }
+
+        return $categoryIds;
     }
 }
